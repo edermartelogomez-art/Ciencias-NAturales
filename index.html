@@ -820,27 +820,25 @@ async function guardarResultados(datos) {
     }
     const cuerpo = JSON.stringify(datos);
 
-    // Intento 1: petición normal (permite leer la respuesta y confirmar).
+    // Intento 1: petición normal (permite leer la respuesta y CONFIRMAR el guardado).
     try {
         const respuesta = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: cuerpo
         });
-        try {
-            const json = await respuesta.json();
-            if (json && json.status === 'error') {
-                marcarGuardadoError(estado, json.mensaje || 'El script reportó un error.');
-                return;
-            }
-        } catch (_) { /* respuesta no legible por CORS: se asume guardado */ }
-        marcarGuardadoOk(estado);
+        let json = null;
+        try { json = await respuesta.json(); } catch (_) { json = null; }
+        if (json && json.status === 'ok') { marcarGuardadoOk(estado); return; }
+        if (json && json.status === 'error') { marcarGuardadoError(estado, json.mensaje || 'El script reportó un error.'); return; }
+        // Respuesta recibida pero no legible (posible pantalla de login o CORS).
+        marcarGuardadoSinConfirmar(estado);
         return;
     } catch (error1) {
         console.warn('Envío normal falló, se intenta modo no-cors:', error1);
     }
 
-    // Intento 2: modo no-cors (no se lee la respuesta, pero los datos sí se guardan).
+    // Intento 2: modo no-cors (los datos PUEDEN guardarse, pero NO se puede confirmar).
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
@@ -848,7 +846,7 @@ async function guardarResultados(datos) {
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: cuerpo
         });
-        marcarGuardadoOk(estado);
+        marcarGuardadoSinConfirmar(estado);
     } catch (error2) {
         console.error('Error al guardar:', error2);
         marcarGuardadoError(estado, 'No se pudo conectar. Revisa la URL, la conexión o los permisos de la app.');
@@ -858,7 +856,13 @@ async function guardarResultados(datos) {
 function marcarGuardadoOk(estado) {
     if (!estado) return;
     estado.className = 'mt-4 text-center text-sm font-semibold text-emerald-600 no-print';
-    estado.innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i>Resultado guardado correctamente.';
+    estado.innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i>Resultado guardado y confirmado.';
+}
+
+function marcarGuardadoSinConfirmar(estado) {
+    if (!estado) return;
+    estado.className = 'mt-4 text-center text-sm font-semibold text-amber-600 no-print';
+    estado.innerHTML = '<i class="fa-solid fa-circle-question mr-2"></i>Resultado enviado, pero no se pudo confirmar. El docente debe verificar en la hoja.';
 }
 
 function marcarGuardadoError(estado, mensaje) {
